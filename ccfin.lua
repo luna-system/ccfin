@@ -49,9 +49,13 @@ local function authHeader(token)
 end
 
 local function request(method, path, body, unauthenticated)
+  local authorization = authHeader(unauthenticated and nil or config.token)
   local headers = {
     ["Accept"] = "application/json",
-    ["X-Emby-Authorization"] = authHeader(unauthenticated and nil or config.token),
+    -- Jellyfin accepts both names. Some CC/server combinations appear to lose
+    -- X-Emby-Authorization, while the standard Authorization header survives.
+    ["Authorization"] = authorization,
+    ["X-Emby-Authorization"] = authorization,
   }
   local encoded
   if body then
@@ -67,8 +71,12 @@ local function request(method, path, body, unauthenticated)
   end
   if not handle then
     if failed and failed.readAll then
+      local code = failed.getResponseCode()
       local detail = failed.readAll()
       failed.close()
+      if path == "/Users/AuthenticateByName" and (code == 400 or code == 401) then
+        error(("Jellyfin login failed (HTTP %d). Check the username and password."):format(code), 0)
+      end
       error(err .. (detail ~= "" and (": " .. detail) or ""), 0)
     end
     error(err or "HTTP request failed", 0)
