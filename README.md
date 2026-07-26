@@ -24,6 +24,7 @@ ccfin-install
 CC:Tweaked must allow HTTP access to both GitHub and the Jellyfin server. Local
 Jellyfin addresses are blocked by default; the server owner must allow the host
 or private-network access in the ComputerCraft server configuration.
+Server addresses entered without a scheme default to HTTPS.
 
 ## Playback profiles
 

@@ -1,5 +1,5 @@
 -- ccfin: a tiny Jellyfin music client for CC:Tweaked.
-local APP_VERSION = "0.1.3"
+local APP_VERSION = "0.1.4"
 local CONFIG_PATH = ".ccfin"
 local DEBUG_PATH = ".ccfin-debug"
 local argv = {...}
@@ -107,6 +107,16 @@ local function request(method, path, body, unauthenticated, debugBody)
     return target:match("^(https?://[^/]+)")
   end
 
+  local function mayForwardCredentials(from, to)
+    local fromScheme, fromHost = from:match("^(https?)://([^/]+)")
+    local toScheme, toHost = to:match("^(https?)://([^/]+)")
+    if not fromHost or not toHost or fromHost:lower() ~= toHost:lower() then
+      return false
+    end
+    return fromScheme == toScheme or
+      (fromScheme == "http" and toScheme == "https")
+  end
+
   local function resolveRedirect(current, location)
     if location:match("^https?://") then return location end
     local currentOrigin = assert(origin(current), "Invalid redirect source URL")
@@ -130,17 +140,18 @@ local function request(method, path, body, unauthenticated, debugBody)
       handle, err, failed = http.get(options)
     end
 
-    if not handle and failed and failed.getResponseCode then
-      local code = failed.getResponseCode()
+    local response = handle or failed
+    if response and response.getResponseCode then
+      local code = response.getResponseCode()
       if code == 301 or code == 302 or code == 307 or code == 308 then
-        local responseHeaders = failed.getResponseHeaders()
+        local responseHeaders = response.getResponseHeaders()
         local location = responseHeaders.Location or responseHeaders.location
         if location then
-          failed.close()
+          response.close()
           if redirects >= 5 then error("Too many HTTP redirects", 0) end
           local redirected = resolveRedirect(target, location)
           debug(("redirect: HTTP %d -> %s"):format(code, redirected))
-          if origin(redirected) ~= origin(url) then
+          if not mayForwardCredentials(target, redirected) then
             error("Refusing to forward Jellyfin credentials to another origin: " ..
               redirected, 0)
           end
@@ -194,7 +205,7 @@ end
 
 local function normalizeServer(server)
   server = trim(server):gsub("/+$", "")
-  if not server:match("^https?://") then server = "http://" .. server end
+  if not server:match("^https?://") then server = "https://" .. server end
   return server
 end
 
