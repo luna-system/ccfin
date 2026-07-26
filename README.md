@@ -50,6 +50,7 @@ change pages, `b` to go back, and `/` from an album list to search.
 
 During playback, hold Ctrl+T to terminate AUKit and return to ccfin.
 
-For credential-safe HTTP diagnostics, run `ccfin --verbose`. It prints request
-and response metadata and a redacted login payload; passwords and access tokens
-are never printed.
+Run `ccfin --version` to confirm the installed version. For credential-safe HTTP
+diagnostics, run `ccfin --verbose`. It prints request and response metadata and
+a redacted login payload, and saves the same output to `.ccfin-debug`;
+passwords and access tokens are never printed.

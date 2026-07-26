@@ -1,14 +1,34 @@
 -- ccfin: a tiny Jellyfin music client for CC:Tweaked.
-local APP_VERSION = "0.1.0"
+local APP_VERSION = "0.1.1"
 local CONFIG_PATH = ".ccfin"
+local DEBUG_PATH = ".ccfin-debug"
 local argv = {...}
 local VERBOSE = false
 for _, arg in ipairs(argv) do
   if arg == "--verbose" or arg == "-v" then VERBOSE = true end
+  if arg == "--version" then
+    print("ccfin " .. APP_VERSION)
+    return
+  end
+end
+
+if VERBOSE then
+  local file = fs.open(DEBUG_PATH, "w")
+  if file then
+    file.writeLine("ccfin " .. APP_VERSION .. " verbose log")
+    file.close()
+  end
 end
 
 local function debug(message)
-  if VERBOSE then print("[ccfin] " .. tostring(message)) end
+  if not VERBOSE then return end
+  local line = "[ccfin] " .. tostring(message)
+  print(line)
+  local file = fs.open(DEBUG_PATH, "a")
+  if file then
+    file.writeLine(line)
+    file.close()
+  end
 end
 
 local function trim(s)
@@ -366,4 +386,7 @@ end
 
 local ok, err = pcall(main)
 term.setCursorBlink(false)
-if not ok then printError(err) end
+if not ok then
+  printError(err)
+  if VERBOSE then print("Verbose log: " .. DEBUG_PATH) end
+end
