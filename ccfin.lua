@@ -76,7 +76,16 @@ local function request(method, path, body, unauthenticated)
   local code = handle.getResponseCode()
   local raw = handle.readAll()
   handle.close()
-  if code < 200 or code >= 300 then error("Jellyfin returned HTTP " .. code, 0) end
+  if code < 200 or code >= 300 then
+    if code == 401 and path == "/Users/AuthenticateByName" then
+      error("Invalid Jellyfin username or password.", 0)
+    end
+    local detail = trim(raw)
+    if detail ~= "" and #detail <= 160 then
+      error(("Jellyfin returned HTTP %d: %s"):format(code, detail), 0)
+    end
+    error("Jellyfin returned HTTP " .. code, 0)
+  end
   return raw ~= "" and textutils.unserializeJSON(raw) or {}
 end
 
@@ -97,7 +106,7 @@ local function login()
   print("ccfin setup")
   print()
   config.server = normalizeServer(prompt("Jellyfin URL: "))
-  local username = prompt("Username: ")
+  local username = trim(prompt("Username: "))
   local password = prompt("Password: ", true)
   config.device_id = config.device_id or ("ccfin-" .. os.getComputerID())
   local result = request("POST", "/Users/AuthenticateByName", {
