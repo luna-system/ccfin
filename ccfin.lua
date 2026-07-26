@@ -1,5 +1,5 @@
 -- ccfin: a tiny Jellyfin music client for CC:Tweaked.
-local APP_VERSION = "0.1.2"
+local APP_VERSION = "0.1.3"
 local CONFIG_PATH = ".ccfin"
 local DEBUG_PATH = ".ccfin-debug"
 local argv = {...}
@@ -102,12 +102,56 @@ local function request(method, path, body, unauthenticated, debugBody)
     debug("request body (" .. #encoded .. " bytes): " ..
       (debugBody or "<redacted>"))
   end
-  local handle, err, failed
-  if method == "POST" then
-    handle, err, failed = http.post(url, encoded, headers)
-  else
-    handle, err, failed = http.get(url, headers, true)
+
+  local function origin(target)
+    return target:match("^(https?://[^/]+)")
   end
+
+  local function resolveRedirect(current, location)
+    if location:match("^https?://") then return location end
+    local currentOrigin = assert(origin(current), "Invalid redirect source URL")
+    if location:sub(1, 1) == "/" then return currentOrigin .. location end
+    return current:match("^(.*/)") .. location
+  end
+
+  local function send(target, redirects)
+    local options = {
+      url = target,
+      headers = headers,
+      binary = method == "GET",
+      redirect = false,
+      method = method,
+      body = encoded,
+    }
+    local handle, err, failed
+    if method == "POST" then
+      handle, err, failed = http.post(options)
+    else
+      handle, err, failed = http.get(options)
+    end
+
+    if not handle and failed and failed.getResponseCode then
+      local code = failed.getResponseCode()
+      if code == 301 or code == 302 or code == 307 or code == 308 then
+        local responseHeaders = failed.getResponseHeaders()
+        local location = responseHeaders.Location or responseHeaders.location
+        if location then
+          failed.close()
+          if redirects >= 5 then error("Too many HTTP redirects", 0) end
+          local redirected = resolveRedirect(target, location)
+          debug(("redirect: HTTP %d -> %s"):format(code, redirected))
+          if origin(redirected) ~= origin(url) then
+            error("Refusing to forward Jellyfin credentials to another origin: " ..
+              redirected, 0)
+          end
+          return send(redirected, redirects + 1)
+        end
+      end
+    end
+    return handle, err, failed
+  end
+
+  local handle, err, failed = send(url, 0)
   if not handle then
     if failed and failed.readAll then
       local code, message = failed.getResponseCode()

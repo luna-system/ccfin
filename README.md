@@ -57,3 +57,6 @@ passwords and access tokens are never printed.
 
 Run `ccfin --probe` to send harmless marker headers to httpbin.org and report
 whether CC:Tweaked transmitted both Jellyfin authorization header names.
+
+ccfin follows same-origin HTTP redirects manually so Jellyfin authorization
+headers are preserved. It refuses to forward credentials to another origin.
