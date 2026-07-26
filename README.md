@@ -64,3 +64,5 @@ headers are preserved. It refuses to forward credentials to another origin.
 Jellyfin requests use its native `X-Emby-Authorization` header; the reserved
 standard `Authorization` header is intentionally avoided for Java HTTP-client
 compatibility.
+Client identity fields use punctuation-free values for compatibility with
+strict structured-authorization parsers.

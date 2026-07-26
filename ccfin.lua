@@ -1,5 +1,5 @@
 -- ccfin: a tiny Jellyfin music client for CC:Tweaked.
-local APP_VERSION = "0.1.5"
+local APP_VERSION = "0.1.6"
 local CONFIG_PATH = ".ccfin"
 local DEBUG_PATH = ".ccfin-debug"
 local argv = {...}
@@ -71,7 +71,9 @@ local config = loadConfig()
 local function authHeader(token)
   local fields = {
     'MediaBrowser Client="ccfin"',
-    'Device="CC:Tweaked Computer"',
+    -- Keep values deliberately conservative. Some HTTP/auth parsers reject the
+    -- entire structured header when a quoted value contains punctuation.
+    'Device="CCTweaked"',
     'DeviceId="' .. (config.device_id or os.getComputerID()) .. '"',
     'Version="' .. APP_VERSION .. '"',
   }
@@ -247,8 +249,7 @@ local function ensureLogin()
 end
 
 local function probeHeaders()
-  local marker = 'MediaBrowser Client="ccfin-probe", Device="CC", ' ..
-    'DeviceId="probe", Version="' .. APP_VERSION .. '"'
+  local marker = authHeader(nil)
   print("Testing CC:Tweaked request headers via httpbin.org...")
   local handle, err, failed = http.post(
     "https://httpbin.org/anything",
