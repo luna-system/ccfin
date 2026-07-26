@@ -1,6 +1,15 @@
 -- ccfin: a tiny Jellyfin music client for CC:Tweaked.
 local APP_VERSION = "0.1.0"
 local CONFIG_PATH = ".ccfin"
+local argv = {...}
+local VERBOSE = false
+for _, arg in ipairs(argv) do
+  if arg == "--verbose" or arg == "-v" then VERBOSE = true end
+end
+
+local function debug(message)
+  if VERBOSE then print("[ccfin] " .. tostring(message)) end
+end
 
 local function trim(s)
   return (s:gsub("^%s+", ""):gsub("%s+$", ""))
@@ -48,7 +57,7 @@ local function authHeader(token)
   return "MediaBrowser " .. table.concat(fields, ", ")
 end
 
-local function request(method, path, body, unauthenticated)
+local function request(method, path, body, unauthenticated, debugBody)
   local authorization = authHeader(unauthenticated and nil or config.token)
   local headers = {
     ["Accept"] = "application/json",
@@ -60,9 +69,17 @@ local function request(method, path, body, unauthenticated)
   local encoded
   if body then
     headers["Content-Type"] = "application/json"
-    encoded = textutils.serializeJSON(body)
+    encoded = type(body) == "string" and body or textutils.serializeJSON(body)
   end
   local url = config.server .. path
+  debug(method .. " " .. url)
+  debug("request headers: Accept, Authorization (" .. #authorization ..
+    " bytes), X-Emby-Authorization (" .. #authorization ..
+    " bytes)" .. (body and ", Content-Type" or ""))
+  if encoded then
+    debug("request body (" .. #encoded .. " bytes): " ..
+      (debugBody or "<redacted>"))
+  end
   local handle, err, failed
   if method == "POST" then
     handle, err, failed = http.post(url, encoded, headers)
@@ -71,19 +88,31 @@ local function request(method, path, body, unauthenticated)
   end
   if not handle then
     if failed and failed.readAll then
-      local code = failed.getResponseCode()
+      local code, message = failed.getResponseCode()
+      local responseHeaders = failed.getResponseHeaders()
       local detail = failed.readAll()
       failed.close()
-      if path == "/Users/AuthenticateByName" and (code == 400 or code == 401) then
-        error(("Jellyfin login failed (HTTP %d). Check the username and password."):format(code), 0)
+      debug(("response: HTTP %s %s"):format(tostring(code), tostring(message)))
+      debug("response Content-Type: " ..
+        tostring(responseHeaders["Content-Type"] or responseHeaders["content-type"]))
+      debug("response body: " .. (detail ~= "" and detail or "<empty>"))
+      if path == "/Users/AuthenticateByName" and code == 400 then
+        error("Jellyfin rejected the login request format (HTTP 400).", 0)
+      elseif path == "/Users/AuthenticateByName" and code == 401 then
+        error("Invalid Jellyfin username or password (HTTP 401).", 0)
       end
       error(err .. (detail ~= "" and (": " .. detail) or ""), 0)
     end
     error(err or "HTTP request failed", 0)
   end
-  local code = handle.getResponseCode()
+  local code, message = handle.getResponseCode()
+  local responseHeaders = handle.getResponseHeaders()
   local raw = handle.readAll()
   handle.close()
+  debug(("response: HTTP %s %s"):format(tostring(code), tostring(message)))
+  debug("response Content-Type: " ..
+    tostring(responseHeaders["Content-Type"] or responseHeaders["content-type"]))
+  debug("response body: " .. (code >= 200 and code < 300 and "<redacted>" or raw))
   if code < 200 or code >= 300 then
     if code == 401 and path == "/Users/AuthenticateByName" then
       error("Invalid Jellyfin username or password.", 0)
@@ -116,11 +145,21 @@ local function login()
   config.server = normalizeServer(prompt("Jellyfin URL: "))
   local username = trim(prompt("Username: "))
   local password = prompt("Password: ", true)
+  debug("normalized server: " .. config.server)
+  debug("username: " .. textutils.serializeJSON(username) ..
+    " (" .. #username .. " bytes); password: <redacted> (" ..
+    #password .. " bytes)")
+  local usernameJSON = textutils.serializeJSON(username)
+  local passwordJSON = textutils.serializeJSON(password)
+  local loginBody = '{"Username":' .. usernameJSON .. ',"Pw":' .. passwordJSON .. '}'
+  local redactedBody = '{"Username":' .. usernameJSON .. ',"Pw":"<redacted>"}'
   config.device_id = config.device_id or ("ccfin-" .. os.getComputerID())
-  local result = request("POST", "/Users/AuthenticateByName", {
-    Username = username,
-    Pw = password,
-  }, true)
+  debug("device ID: " .. config.device_id)
+  local allowed, reason = http.checkURL(config.server .. "/Users/AuthenticateByName")
+  debug("http.checkURL: " .. tostring(allowed) ..
+    (reason and (" (" .. reason .. ")") or ""))
+  local result = request("POST", "/Users/AuthenticateByName",
+    loginBody, true, redactedBody)
   config.token = assert(result.AccessToken, "Login response had no access token")
   config.user_id = assert(result.User and result.User.Id, "Login response had no user")
   config.username = result.User.Name
