@@ -61,3 +61,6 @@ whether CC:Tweaked transmitted both Jellyfin authorization header names.
 
 ccfin follows same-origin HTTP redirects manually so Jellyfin authorization
 headers are preserved. It refuses to forward credentials to another origin.
+Jellyfin requests use its native `X-Emby-Authorization` header; the reserved
+standard `Authorization` header is intentionally avoided for Java HTTP-client
+compatibility.

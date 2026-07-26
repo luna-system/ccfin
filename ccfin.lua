@@ -1,5 +1,5 @@
 -- ccfin: a tiny Jellyfin music client for CC:Tweaked.
-local APP_VERSION = "0.1.4"
+local APP_VERSION = "0.1.5"
 local CONFIG_PATH = ".ccfin"
 local DEBUG_PATH = ".ccfin-debug"
 local argv = {...}
@@ -83,9 +83,8 @@ local function request(method, path, body, unauthenticated, debugBody)
   local authorization = authHeader(unauthenticated and nil or config.token)
   local headers = {
     ["Accept"] = "application/json",
-    -- Jellyfin accepts both names. Some CC/server combinations appear to lose
-    -- X-Emby-Authorization, while the standard Authorization header survives.
-    ["Authorization"] = authorization,
+    -- Use Jellyfin's native header. Authorization is a reserved header in some
+    -- Java HTTP clients and is unnecessary now redirects are handled manually.
     ["X-Emby-Authorization"] = authorization,
   }
   local encoded
@@ -95,9 +94,8 @@ local function request(method, path, body, unauthenticated, debugBody)
   end
   local url = config.server .. path
   debug(method .. " " .. url)
-  debug("request headers: Accept, Authorization (" .. #authorization ..
-    " bytes), X-Emby-Authorization (" .. #authorization ..
-    " bytes)" .. (body and ", Content-Type" or ""))
+  debug("request headers: Accept, X-Emby-Authorization (" ..
+    #authorization .. " bytes)" .. (body and ", Content-Type" or ""))
   if encoded then
     debug("request body (" .. #encoded .. " bytes): " ..
       (debugBody or "<redacted>"))
