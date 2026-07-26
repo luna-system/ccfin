@@ -1,11 +1,13 @@
 -- ccfin: a tiny Jellyfin music client for CC:Tweaked.
-local APP_VERSION = "0.1.1"
+local APP_VERSION = "0.1.2"
 local CONFIG_PATH = ".ccfin"
 local DEBUG_PATH = ".ccfin-debug"
 local argv = {...}
 local VERBOSE = false
+local PROBE = false
 for _, arg in ipairs(argv) do
   if arg == "--verbose" or arg == "-v" then VERBOSE = true end
+  if arg == "--probe" then PROBE = true end
   if arg == "--version" then
     print("ccfin " .. APP_VERSION)
     return
@@ -191,6 +193,42 @@ local function ensureLogin()
   if not config.server or not config.token or not config.user_id then login() end
 end
 
+local function probeHeaders()
+  local marker = 'MediaBrowser Client="ccfin-probe", Device="CC", ' ..
+    'DeviceId="probe", Version="' .. APP_VERSION .. '"'
+  print("Testing CC:Tweaked request headers via httpbin.org...")
+  local handle, err, failed = http.post(
+    "https://httpbin.org/anything",
+    '{"probe":true}',
+    {
+      ["Accept"] = "application/json",
+      ["Content-Type"] = "application/json",
+      ["Authorization"] = marker,
+      ["X-Emby-Authorization"] = marker,
+    }
+  )
+  if not handle then
+    local detail = failed and failed.readAll and failed.readAll() or ""
+    if failed and failed.close then failed.close() end
+    error("Header probe failed: " .. tostring(err) ..
+      (detail ~= "" and (": " .. detail) or ""), 0)
+  end
+  local response = textutils.unserializeJSON(handle.readAll())
+  handle.close()
+  local headers = response and response.headers or {}
+  local authorization = headers.Authorization or headers.authorization
+  local emby = headers["X-Emby-Authorization"] or
+    headers["x-emby-authorization"]
+  print("Authorization transmitted: " .. tostring(authorization == marker))
+  print("X-Emby-Authorization transmitted: " .. tostring(emby == marker))
+  if authorization and authorization ~= marker then
+    print("Authorization arrived altered (" .. #authorization .. " bytes)")
+  end
+  if emby and emby ~= marker then
+    print("X-Emby-Authorization arrived altered (" .. #emby .. " bytes)")
+  end
+end
+
 local function choose(title, items, label, allowSearch)
   local page, perPage = 1, math.max(3, select(2, term.getSize()) - 5)
   while true do
@@ -358,6 +396,7 @@ local function browseLibrary(library)
 end
 
 local function main()
+  if PROBE then return probeHeaders() end
   ensureLogin()
   while true do
     local views = request("GET", "/Users/" .. config.user_id .. "/Views").Items or {}
