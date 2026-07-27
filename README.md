@@ -54,7 +54,9 @@ During playback, hold Ctrl+T to terminate AUKit and return to ccfin.
 Run `ccfin --version` to confirm the installed version. For credential-safe HTTP
 diagnostics, run `ccfin --verbose`. It prints request and response metadata and
 a redacted login payload, and saves the same output to `.ccfin-debug`;
-passwords and access tokens are never printed.
+passwords and access tokens are never printed. Playback diagnostics include
+speaker discovery, selected profile, a redacted stream URL, AUStream options,
+and the program's return status.
 
 Run `ccfin --probe` to send harmless marker headers to httpbin.org and report
 whether CC:Tweaked transmitted both Jellyfin authorization header names.

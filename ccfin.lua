@@ -1,5 +1,5 @@
 -- ccfin: a tiny Jellyfin music client for CC:Tweaked.
-local APP_VERSION = "0.1.7"
+local APP_VERSION = "0.1.8"
 local CONFIG_PATH = ".ccfin"
 local DEBUG_PATH = ".ccfin-debug"
 local argv = {...}
@@ -369,11 +369,29 @@ local function playbackUrl(item)
     query(params), profile.options
 end
 
+local function redactUrl(url)
+  return url:gsub("([?&]api_key=)[^&]+", "%1<redacted>")
+end
+
 local function play(item)
   if not fs.exists("austream.lua") or not fs.exists("aukit.lua") then
     error("Missing aukit.lua/austream.lua. Run: ccfin-install", 0)
   end
   local url, options = playbackUrl(item)
+  local speakers = {peripheral.find("speaker")}
+  local speakerNames = {}
+  for i, speaker in ipairs(speakers) do
+    speakerNames[i] = peripheral.getName(speaker)
+  end
+  debug("playback item: " .. tostring(item.Id) .. " / " ..
+    tostring(item.Name))
+  debug("playback profile: " .. tostring(config.profile))
+  debug("AUKit files: aukit.lua=" .. tostring(fs.exists("aukit.lua")) ..
+    ", austream.lua=" .. tostring(fs.exists("austream.lua")))
+  debug("speakers (" .. #speakers .. "): " ..
+    (#speakerNames > 0 and table.concat(speakerNames, ", ") or "<none>"))
+  debug("stream URL: " .. redactUrl(url))
+  debug("AUStream options: " .. options)
   term.clear()
   term.setCursorPos(1, 1)
   print("Now playing")
@@ -381,9 +399,13 @@ local function play(item)
   print((item.AlbumArtist or item.Artists and item.Artists[1]) or "")
   print()
   print("Profile: " .. config.profile .. "  (hold Ctrl+T to stop)")
-  local ok, err = pcall(shell.run, "austream.lua", url, options)
-  if not ok then
-    printError(err)
+  local callOk, programOk = pcall(shell.run, "austream.lua", url, options)
+  debug("AUStream call completed: callOk=" .. tostring(callOk) ..
+    ", programOk=" .. tostring(programOk))
+  if not callOk or programOk ~= true then
+    if not callOk then printError(programOk) end
+    printError("AUStream failed.")
+    print("Run ccfin --verbose for playback diagnostics.")
     print("Try another profile in Settings.")
     print("Press any key.")
     os.pullEvent("key")
