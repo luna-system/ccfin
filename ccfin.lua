@@ -1,5 +1,5 @@
 -- ccfin: a tiny Jellyfin music client for CC:Tweaked.
-local APP_VERSION = "0.2.0"
+local APP_VERSION = "0.3.0"
 local CONFIG_PATH = ".ccfin"
 local DEBUG_PATH = ".ccfin-debug"
 local argv = {...}
@@ -374,6 +374,11 @@ local function play(item)
   local url, profile = playbackUrl(item)
   local speakers = {peripheral.find("speaker")}
   if #speakers == 0 then error("No speaker attached", 0) end
+  if #speakers == 2 and
+      peripheral.getName(speakers[1]) == "right" and
+      peripheral.getName(speakers[2]) == "left" then
+    speakers[1], speakers[2] = speakers[2], speakers[1]
+  end
   local speakerNames = {}
   for i, speaker in ipairs(speakers) do
     speakerNames[i] = peripheral.getName(speaker)
@@ -386,6 +391,9 @@ local function play(item)
     ", version=" .. tostring(aukitVersion))
   debug("speakers (" .. #speakers .. "): " ..
     (#speakerNames > 0 and table.concat(speakerNames, ", ") or "<none>"))
+  debug("output mode: " .. (#speakers == 1 and "mono" or "stereo") ..
+    (#speakers >= 2 and (" (L=" .. speakerNames[1] ..
+      ", R=" .. speakerNames[2] .. ")") or ""))
   debug("stream URL: " .. url)
   debug("decoder: " .. profile.decoder)
   term.clear()
@@ -395,6 +403,12 @@ local function play(item)
   print((item.AlbumArtist or item.Artists and item.Artists[1]) or "")
   print()
   print("Profile: " .. config.profile .. "  (hold Ctrl+T to stop)")
+  if #speakers == 1 then
+    print("Output: mono (" .. speakerNames[1] .. ")")
+  else
+    print("Output: stereo (L=" .. speakerNames[1] ..
+      ", R=" .. speakerNames[2] .. ")")
+  end
   local callOk, playbackError = pcall(function()
     local response, err, failed = http.get({
       url = url,
@@ -458,6 +472,7 @@ local function play(item)
     print("Press any key.")
     os.pullEvent("key")
   end
+  return callOk
 end
 
 local function settings()
@@ -477,12 +492,23 @@ local function browseTracks(album)
     Recursive = "true", SortBy = "ParentIndexNumber,IndexNumber,SortName",
   }
   while true do
-    local track = choose(album.Name, tracks, function(v)
+    local menu = {
+      { special = "album", Name = ">> Play entire album" },
+    }
+    for _, track in ipairs(tracks) do menu[#menu + 1] = track end
+    local track = choose(album.Name, menu, function(v)
+      if v.special == "album" then return v.Name end
       local number = v.IndexNumber and (v.IndexNumber .. ". ") or ""
       return number .. (v.Name or "Unknown")
     end)
     if not track then return end
-    play(track)
+    if track.special == "album" then
+      for _, albumTrack in ipairs(tracks) do
+        if not play(albumTrack) then break end
+      end
+    else
+      play(track)
+    end
   end
 end
 

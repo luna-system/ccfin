@@ -39,7 +39,8 @@ Server addresses entered without a scheme default to HTTPS.
   little-endian stereo PCM. Jellyfin labels this response `audio/wav`, but does
   not include a WAV header. ccfin describes the raw samples explicitly to AUKit.
   This avoids doing FLAC decompression on the ComputerCraft computer, but its
-  large response often exceeds CC:Tweaked's HTTP download limit.
+  large response often exceeds CC:Tweaked's HTTP download limit and may decode
+  or play too slowly. It is retained as an experimental profile.
 - **FLAC** asks Jellyfin for a compressed FLAC response and is the recommended
   profile.
 - **Original FLAC** downloads the original item through Jellyfin.
@@ -47,7 +48,8 @@ Server addresses entered without a scheme default to HTTPS.
 All CC:Tweaked speaker audio ultimately becomes signed 8-bit PCM at 48 kHz.
 That hard limit explains much of the quality difference from the source FLAC.
 Using two speakers lets AUKit keep the left and right channels; one speaker is
-mixed to mono.
+mixed to mono. ccfin displays the selected output mode and channel-to-speaker
+assignment before playback.
 
 Credentials are exchanged for a Jellyfin access token. The token and server URL
 are stored in `.ccfin` on the in-game computer; the password is not stored.
@@ -56,6 +58,8 @@ are stored in `.ccfin` on the in-game computer; the password is not stored.
 
 Menus show their controls at the bottom. Enter a number to select, `n`/`p` to
 change pages, `b` to go back, and `/` from an album list to search.
+Each album includes a `>> Play entire album` entry which queues its tracks in
+disc/track order.
 
 During playback, hold Ctrl+T to terminate AUKit and return to ccfin.
 
