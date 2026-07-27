@@ -1,5 +1,5 @@
 -- ccfin: a tiny Jellyfin music client for CC:Tweaked.
-local APP_VERSION = "0.1.9"
+local APP_VERSION = "0.2.0"
 local CONFIG_PATH = ".ccfin"
 local DEBUG_PATH = ".ccfin-debug"
 local argv = {...}
@@ -240,7 +240,7 @@ local function login()
   config.token = assert(result.AccessToken, "Login response had no access token")
   config.user_id = assert(result.User and result.User.Id, "Login response had no user")
   config.username = result.User.Name
-  config.profile = config.profile or "wav"
+  config.profile = config.profile or "flac"
   saveConfig(config)
 end
 
@@ -324,6 +324,7 @@ end
 
 local profiles = {
   wav = {
+    decoder = "pcm",
     extension = "wav",
     params = {
       Container = "wav", TranscodingContainer = "wav",
@@ -331,11 +332,9 @@ local profiles = {
       EnableDirectStream = "false", TranscodingProtocol = "http",
       AudioSampleRate = 48000, MaxAudioChannels = 2,
     },
-    -- Jellyfin's universal endpoint emits headerless little-endian PCM for this
-    -- profile, despite reporting audio/wav as its content type.
-    options = "type=pcm,streamData=true,bitDepth=16,dataType=signed,channels=2,sampleRate=48000,bigEndian=false,interpolation=cubic",
   },
   flac = {
+    decoder = "flac",
     extension = "flac",
     params = {
       Container = "flac", TranscodingContainer = "flac",
@@ -343,44 +342,38 @@ local profiles = {
       EnableDirectStream = "false", TranscodingProtocol = "http",
       AudioSampleRate = 48000, MaxAudioChannels = 2,
     },
-    options = "type=flac,streamData=true,interpolation=cubic",
   },
   original = {
+    decoder = "flac",
     extension = "flac",
     direct = true,
-    options = "type=flac,streamData=true,interpolation=cubic",
   },
 }
 
 local function playbackUrl(item)
   local profile = profiles[config.profile] or profiles.wav
   if profile.direct then
-    return config.server .. "/Items/" .. item.Id .. "/Download?" .. query {
-      api_key = config.token,
-    }, profile.options
+    return config.server .. "/Items/" .. item.Id .. "/Download", profile
   end
   local params = {}
   for k, v in pairs(profile.params) do params[k] = v end
   params.UserId = config.user_id
   params.DeviceId = config.device_id
-  params.api_key = config.token
   params.MaxStreamingBitrate = config.bitrate or 1536000
   return config.server .. "/Audio/" .. item.Id .. "/universal?" ..
-    query(params), profile.options
-end
-
-local function redactUrl(url)
-  return url:gsub("([?&]api_key=)[^&]+", "%1<redacted>")
+    query(params), profile
 end
 
 local function play(item)
-  if not fs.exists("austream.lua") or not fs.exists("aukit.lua") then
-    error("Missing aukit.lua/austream.lua. Run: ccfin-install", 0)
+  if not fs.exists("aukit.lua") then
+    error("Missing aukit.lua. Run: ccfin-install", 0)
   end
   local aukitOk, aukit = pcall(require, "aukit")
   local aukitVersion = aukitOk and aukit and aukit._VERSION or "unknown"
-  local url, options = playbackUrl(item)
+  if not aukitOk then error("Could not load AUKit: " .. tostring(aukit), 0) end
+  local url, profile = playbackUrl(item)
   local speakers = {peripheral.find("speaker")}
+  if #speakers == 0 then error("No speaker attached", 0) end
   local speakerNames = {}
   for i, speaker in ipairs(speakers) do
     speakerNames[i] = peripheral.getName(speaker)
@@ -388,14 +381,13 @@ local function play(item)
   debug("playback item: " .. tostring(item.Id) .. " / " ..
     tostring(item.Name))
   debug("playback profile: " .. tostring(config.profile))
-  debug("AUKit files: aukit.lua=" .. tostring(fs.exists("aukit.lua")) ..
-    ", austream.lua=" .. tostring(fs.exists("austream.lua")))
+  debug("AUKit file: aukit.lua=" .. tostring(fs.exists("aukit.lua")))
   debug("AUKit loaded: " .. tostring(aukitOk) ..
     ", version=" .. tostring(aukitVersion))
   debug("speakers (" .. #speakers .. "): " ..
     (#speakerNames > 0 and table.concat(speakerNames, ", ") or "<none>"))
-  debug("stream URL: " .. redactUrl(url))
-  debug("AUStream options: " .. options)
+  debug("stream URL: " .. url)
+  debug("decoder: " .. profile.decoder)
   term.clear()
   term.setCursorPos(1, 1)
   print("Now playing")
@@ -403,12 +395,64 @@ local function play(item)
   print((item.AlbumArtist or item.Artists and item.Artists[1]) or "")
   print()
   print("Profile: " .. config.profile .. "  (hold Ctrl+T to stop)")
-  local callOk, programOk = pcall(shell.run, "austream.lua", url, options)
-  debug("AUStream call completed: callOk=" .. tostring(callOk) ..
-    ", programOk=" .. tostring(programOk))
-  if not callOk or programOk ~= true then
-    if not callOk then printError(programOk) end
-    printError("AUStream failed.")
+  local callOk, playbackError = pcall(function()
+    local response, err, failed = http.get({
+      url = url,
+      headers = {
+        ["X-Emby-Authorization"] = authHeader(config.token),
+      },
+      binary = true,
+      redirect = false,
+    })
+    if not response then
+      local detail = ""
+      if failed and failed.readAll then
+        detail = failed.readAll()
+        failed.close()
+      end
+      error(tostring(err) .. (detail ~= "" and (": " .. detail) or ""), 0)
+    end
+
+    local code, message = response.getResponseCode()
+    local responseHeaders = response.getResponseHeaders()
+    debug(("audio response: HTTP %s %s"):format(
+      tostring(code), tostring(message)))
+    debug("audio Content-Type: " .. tostring(
+      responseHeaders["Content-Type"] or responseHeaders["content-type"]))
+    debug("audio Content-Length: " .. tostring(
+      responseHeaders["Content-Length"] or responseHeaders["content-length"]))
+    if code < 200 or code >= 300 then
+      local detail = response.readAll()
+      response.close()
+      error(("Jellyfin audio request returned HTTP %d: %s"):format(
+        code, detail), 0)
+    end
+
+    local data = response.readAll()
+    response.close()
+    debug("audio bytes received: " .. #data)
+
+    aukit.defaultInterpolation = "cubic"
+    local mono = #speakers == 1
+    local iterator
+    if profile.decoder == "pcm" then
+      iterator = aukit.stream.pcm(
+        data, 16, "signed", 2, 48000, false, mono)
+    else
+      -- AUKit's chunked FLAC reader is currently broken. Passing the complete
+      -- compressed response as a string uses its reliable decoder path.
+      iterator = aukit.stream.flac(data, mono)
+    end
+
+    local playOptions = {callback = iterator}
+    for i, speaker in ipairs(speakers) do playOptions[i] = speaker end
+    aukit.play(playOptions)
+  end)
+  debug("AUKit playback completed: ok=" .. tostring(callOk) ..
+    (callOk and "" or (", error=" .. tostring(playbackError))))
+  if not callOk then
+    printError(playbackError)
+    printError("AUKit playback failed.")
     print("Run ccfin --verbose for playback diagnostics.")
     print("Try another profile in Settings.")
     print("Press any key.")
@@ -418,8 +462,8 @@ end
 
 local function settings()
   local items = {
-    { key = "wav", name = "PCM - server-decoded stereo (recommended)" },
-    { key = "flac", name = "FLAC - server-transcoded" },
+    { key = "wav", name = "PCM - server-decoded stereo (large)" },
+    { key = "flac", name = "FLAC - compressed (recommended)" },
     { key = "original", name = "Original FLAC - direct download" },
   }
   local picked = choose("Playback profile (current: " .. config.profile .. ")", items,

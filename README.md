@@ -2,7 +2,7 @@
 
 A small Jellyfin music client for CC:Tweaked, built for an Advanced Computer and
 one or two speakers. It browses music libraries, albums, and tracks, supports
-search, and hands playback to [AUKit](https://github.com/MCJack123/AUKit).
+search, and uses [AUKit](https://github.com/MCJack123/AUKit) directly.
 
 ## Install in ComputerCraft
 
@@ -11,7 +11,6 @@ and install AUKit:
 
 ```text
 wget https://raw.githubusercontent.com/MCJack123/AUKit/master/aukit.lua
-wget https://raw.githubusercontent.com/MCJack123/AUKit/master/austream.lua
 ccfin
 ```
 
@@ -21,14 +20,13 @@ Alternatively, copy `ccfin-install.lua` next to `ccfin.lua`, then run:
 ccfin-install
 ```
 
-To replace mismatched or cached AUKit/AUStream files with current upstream
-versions, run:
+To replace a cached AUKit file with the current upstream version, run:
 
 ```text
 ccfin-install --force
 ```
 
-Forced downloads include a unique cache-busting query.
+Forced downloads include a unique cache-busting query. AUStream is not needed.
 
 CC:Tweaked must allow HTTP access to both GitHub and the Jellyfin server. Local
 Jellyfin addresses are blocked by default; the server owner must allow the host
@@ -40,9 +38,10 @@ Server addresses entered without a scheme default to HTTPS.
 - **PCM** asks Jellyfin to decode to headerless 48 kHz, signed 16-bit,
   little-endian stereo PCM. Jellyfin labels this response `audio/wav`, but does
   not include a WAV header. ccfin describes the raw samples explicitly to AUKit.
-  This avoids doing FLAC decompression on the ComputerCraft computer and is the
-  recommended profile.
-- **FLAC** asks Jellyfin to produce a 48 kHz FLAC stream.
+  This avoids doing FLAC decompression on the ComputerCraft computer, but its
+  large response often exceeds CC:Tweaked's HTTP download limit.
+- **FLAC** asks Jellyfin for a compressed FLAC response and is the recommended
+  profile.
 - **Original FLAC** downloads the original item through Jellyfin.
 
 All CC:Tweaked speaker audio ultimately becomes signed 8-bit PCM at 48 kHz.
@@ -64,8 +63,8 @@ Run `ccfin --version` to confirm the installed version. For credential-safe HTTP
 diagnostics, run `ccfin --verbose`. It prints request and response metadata and
 a redacted login payload, and saves the same output to `.ccfin-debug`;
 passwords and access tokens are never printed. Playback diagnostics include
-speaker discovery, selected profile, a redacted stream URL, AUStream options,
-and the program's return status.
+speaker discovery, selected profile, stream response metadata, decoder
+selection, and AUKit's return status.
 
 Run `ccfin --probe` to send harmless marker headers to httpbin.org and report
 whether CC:Tweaked transmitted both Jellyfin authorization header names.

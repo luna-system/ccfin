@@ -1,6 +1,5 @@
 local files = {
   ["aukit.lua"] = "https://raw.githubusercontent.com/MCJack123/AUKit/master/aukit.lua",
-  ["austream.lua"] = "https://raw.githubusercontent.com/MCJack123/AUKit/master/austream.lua",
 }
 
 local args = {...}
