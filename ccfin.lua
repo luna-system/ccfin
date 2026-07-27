@@ -1,5 +1,5 @@
 -- ccfin: a tiny Jellyfin music client for CC:Tweaked.
-local APP_VERSION = "0.3.0"
+local APP_VERSION = "0.3.1"
 local CONFIG_PATH = ".ccfin"
 local DEBUG_PATH = ".ccfin-debug"
 local argv = {...}
@@ -518,15 +518,23 @@ local function search()
   local text = prompt("Search music: ")
   if trim(text) == "" then return end
   local items = getItems {
-    SearchTerm = text, IncludeItemTypes = "Audio",
+    SearchTerm = text, IncludeItemTypes = "Audio,MusicAlbum",
     Recursive = "true", SortBy = "SortName", Limit = 200,
   }
   while true do
-    local track = choose("Search: " .. text, items, function(v)
-      return (v.Name or "Unknown") .. (v.AlbumArtist and (" - " .. v.AlbumArtist) or "")
+    local item = choose("Search: " .. text, items, function(v)
+      local kind = v.Type == "MusicAlbum" and "Album" or "Track"
+      return ("[%s] %s%s"):format(
+        kind,
+        v.Name or "Unknown",
+        v.AlbumArtist and (" - " .. v.AlbumArtist) or "")
     end)
-    if not track then return end
-    play(track)
+    if not item then return end
+    if item.Type == "MusicAlbum" then
+      browseTracks(item)
+    else
+      play(item)
+    end
   end
 end
 

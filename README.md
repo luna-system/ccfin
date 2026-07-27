@@ -60,6 +60,8 @@ Menus show their controls at the bottom. Enter a number to select, `n`/`p` to
 change pages, `b` to go back, and `/` from an album list to search.
 Each album includes a `>> Play entire album` entry which queues its tracks in
 disc/track order.
+Search results include both albums and individual tracks. Selecting an album
+opens its track list.
 
 During playback, hold Ctrl+T to terminate AUKit and return to ccfin.
 
