@@ -21,6 +21,15 @@ Alternatively, copy `ccfin-install.lua` next to `ccfin.lua`, then run:
 ccfin-install
 ```
 
+To replace mismatched or cached AUKit/AUStream files with current upstream
+versions, run:
+
+```text
+ccfin-install --force
+```
+
+Forced downloads include a unique cache-busting query.
+
 CC:Tweaked must allow HTTP access to both GitHub and the Jellyfin server. Local
 Jellyfin addresses are blocked by default; the server owner must allow the host
 or private-network access in the ComputerCraft server configuration.

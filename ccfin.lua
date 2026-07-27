@@ -1,5 +1,5 @@
 -- ccfin: a tiny Jellyfin music client for CC:Tweaked.
-local APP_VERSION = "0.1.8"
+local APP_VERSION = "0.1.9"
 local CONFIG_PATH = ".ccfin"
 local DEBUG_PATH = ".ccfin-debug"
 local argv = {...}
@@ -377,6 +377,8 @@ local function play(item)
   if not fs.exists("austream.lua") or not fs.exists("aukit.lua") then
     error("Missing aukit.lua/austream.lua. Run: ccfin-install", 0)
   end
+  local aukitOk, aukit = pcall(require, "aukit")
+  local aukitVersion = aukitOk and aukit and aukit._VERSION or "unknown"
   local url, options = playbackUrl(item)
   local speakers = {peripheral.find("speaker")}
   local speakerNames = {}
@@ -388,6 +390,8 @@ local function play(item)
   debug("playback profile: " .. tostring(config.profile))
   debug("AUKit files: aukit.lua=" .. tostring(fs.exists("aukit.lua")) ..
     ", austream.lua=" .. tostring(fs.exists("austream.lua")))
+  debug("AUKit loaded: " .. tostring(aukitOk) ..
+    ", version=" .. tostring(aukitVersion))
   debug("speakers (" .. #speakers .. "): " ..
     (#speakerNames > 0 and table.concat(speakerNames, ", ") or "<none>"))
   debug("stream URL: " .. redactUrl(url))
